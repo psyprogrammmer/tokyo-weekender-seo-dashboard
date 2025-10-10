@@ -29,7 +29,87 @@ const Settings: React.FC = () => {
   // 初回ロード時にステータスを確認
   useEffect(() => {
     checkGoogleAuthStatus()
+    
+    // URL パラメータから認証コードを取得
+    const urlParams = new URLSearchParams(window.location.search)
+    const code = urlParams.get('code')
+    const state = urlParams.get('state')
+    
+    if (code) {
+      // 認証コードを Backend に送信
+      handleAuthCallback(code, state)
+    }
+    
+    // ポップアップからのメッセージを受信
+    const handleMessage = (event: MessageEvent) => {
+      // セキュリティ: 同じオリジンからのメッセージのみ受け入れ
+      if (event.origin !== window.location.origin) return
+      
+      if (event.data.type === 'google-auth-success') {
+        // 認証成功
+        setIsConnecting(false)
+        checkGoogleAuthStatus()
+        alert('Google アカウントとの接続に成功しました！')
+      } else if (event.data.type === 'google-auth-error') {
+        // 認証失敗
+        setIsConnecting(false)
+        setError(event.data.error || '認証に失敗しました')
+      }
+    }
+    
+    window.addEventListener('message', handleMessage)
+    
+    return () => {
+      window.removeEventListener('message', handleMessage)
+    }
   }, [])
+  
+  // OAuth コールバックを処理
+  const handleAuthCallback = async (code: string, state: string | null) => {
+    try {
+      setIsConnecting(true)
+      
+      // 認証コードを含む完全な URL を構築
+      const callbackUrl = `${window.location.origin}${window.location.pathname}?code=${code}${state ? `&state=${state}` : ''}`
+      
+      // Backend に送信
+      const response = await api.post('/google/auth-callback', null, {
+        params: { authorization_response: callbackUrl }
+      })
+      
+      if (response.data.success) {
+        // URL から認証パラメータを削除
+        window.history.replaceState({}, document.title, window.location.pathname)
+        
+        // 認証ステータスを再確認
+        await checkGoogleAuthStatus()
+        
+        // ポップアップ内で実行されている場合は閉じる
+        if (window.opener && !window.opener.closed) {
+          // 親ウィンドウに認証完了を通知
+          window.opener.postMessage({ type: 'google-auth-success' }, window.location.origin)
+          window.close()
+        } else {
+          // 通常のウィンドウの場合はアラート表示
+          alert('Google アカウントとの接続に成功しました！')
+        }
+      }
+    } catch (err: any) {
+      console.error('Failed to handle auth callback:', err)
+      setError(err.response?.data?.detail || '認証の処理に失敗しました')
+      
+      // URL から認証パラメータを削除
+      window.history.replaceState({}, document.title, window.location.pathname)
+      
+      // ポップアップ内で実行されている場合は閉じる
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage({ type: 'google-auth-error', error: err.message }, window.location.origin)
+        window.close()
+      }
+    } finally {
+      setIsConnecting(false)
+    }
+  }
 
   // Google アカウントに接続
   const handleConnectGoogle = async () => {

@@ -603,7 +603,7 @@ async def get_google_auth_url():
     try:
         auth_service = GoogleAuthService()
         # リダイレクト URI は環境に応じて変更
-        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:3000/auth/callback')
+        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:3002/settings')
         auth_url = auth_service.get_authorization_url(redirect_uri)
         
         return {
@@ -615,15 +615,19 @@ async def get_google_auth_url():
         raise HTTPException(status_code=500, detail=f"認証 URL の生成に失敗: {str(e)}")
 
 @app.post("/api/google/auth-callback")
-async def handle_google_auth_callback(authorization_response: str):
+async def handle_google_auth_callback(authorization_response: str = None):
     """Google OAuth 2.0 コールバックを処理"""
     try:
+        if not authorization_response:
+            raise HTTPException(status_code=400, detail="authorization_response is required")
+        
         auth_service = GoogleAuthService()
-        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:3000/auth/callback')
+        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:3002/settings')
         result = auth_service.handle_authorization_callback(authorization_response, redirect_uri)
         
         return result
     except Exception as e:
+        print(f"認証エラー: {str(e)}")
         raise HTTPException(status_code=500, detail=f"認証の処理に失敗: {str(e)}")
 
 @app.post("/api/google/revoke")
