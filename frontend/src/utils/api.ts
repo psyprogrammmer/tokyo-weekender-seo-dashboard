@@ -1,12 +1,14 @@
 // API configuration utility
+import axios from 'axios'
+
 export const getApiBaseUrl = (): string => {
   // In production (Render.com), use the backend service URL
   if (import.meta.env.PROD) {
-    return 'https://tokyo-weekender-seo-dashboard-backend.onrender.com'
+    return 'https://tokyo-weekender-seo-dashboard-backend.onrender.com/api'
   }
   
   // In development, use localhost
-  return 'http://localhost:8000'
+  return 'http://localhost:8000/api'
 }
 
 // Mock data for when backend is not available
@@ -511,7 +513,7 @@ const getMockData = (endpoint: string): any => {
           Navigational: false,
           Branded: false,
           Local: true
-        }
+        },
         {
           Keyword: 'omoide yokocho',
           'Country code': 'US',
@@ -987,3 +989,30 @@ export const apiRequest = async (endpoint: string, _options?: RequestInit): Prom
     },
   })
 }
+
+// Create and export axios instance
+export const api = axios.create({
+  baseURL: getApiBaseUrl(),
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  timeout: 30000, // 30 seconds
+})
+
+// Add response interceptor for better error handling
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response) {
+      // Server responded with error status
+      console.error('API Error:', error.response.status, error.response.data)
+    } else if (error.request) {
+      // Request made but no response received
+      console.error('Network Error:', error.message)
+    } else {
+      // Error in request configuration
+      console.error('Request Error:', error.message)
+    }
+    return Promise.reject(error)
+  }
+)

@@ -6,14 +6,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 import json
+import os
 import pandas as pd
 from typing import Dict, List, Optional
 import uvicorn
+from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 # Import database components
 from backend.models.database import get_db, engine, Base
 from backend.services.database_service import DatabaseService
+from backend.services.google_auth_service import GoogleAuthService
+from backend.services.ga4_service import GA4Service
+from backend.services.gsc_service import GSCService
 
 def get_db_safe():
     """Safe database dependency that handles connection errors"""
@@ -35,6 +40,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:3000", 
+        "http://localhost:3001",
+        "http://localhost:3002",
         "http://localhost:5173",
         "https://tokyo-weekender-seo-dashboard.onrender.com"
     ],
@@ -575,6 +582,418 @@ async def get_content_recommendations(db: Session = Depends(get_db)):
             pass
         
         raise HTTPException(status_code=500, detail=f"Content recommendations error: {str(e)}")
+
+# Google 認証エンドポイント
+@app.get("/api/google/auth-status")
+async def get_google_auth_status():
+    """Google 認証ステータスの確認"""
+    try:
+        auth_service = GoogleAuthService()
+        status = auth_service.get_auth_status()
+        return status
+    except Exception as e:
+        return {
+            'authenticated': False,
+            'error': str(e)
+        }
+
+@app.get("/api/google/auth-url")
+async def get_google_auth_url():
+    """Google OAuth 2.0 認証 URL を取得"""
+    try:
+        auth_service = GoogleAuthService()
+        # リダイレクト URI は環境に応じて変更
+        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:3000/auth/callback')
+        auth_url = auth_service.get_authorization_url(redirect_uri)
+        
+        return {
+            'auth_url': auth_url
+        }
+    except FileNotFoundError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"認証 URL の生成に失敗: {str(e)}")
+
+@app.post("/api/google/auth-callback")
+async def handle_google_auth_callback(authorization_response: str):
+    """Google OAuth 2.0 コールバックを処理"""
+    try:
+        auth_service = GoogleAuthService()
+        redirect_uri = os.getenv('GOOGLE_REDIRECT_URI', 'http://localhost:3000/auth/callback')
+        result = auth_service.handle_authorization_callback(authorization_response, redirect_uri)
+        
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"認証の処理に失敗: {str(e)}")
+
+@app.post("/api/google/revoke")
+async def revoke_google_auth():
+    """Google 認証を取り消し"""
+    try:
+        auth_service = GoogleAuthService()
+        result = auth_service.revoke_credentials()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"認証の取り消しに失敗: {str(e)}")
+
+# GA4 エンドポイント
+@app.get("/api/ga4/realtime")
+async def get_ga4_realtime():
+    """GA4 リアルタイムデータを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        ga4_service = GA4Service(credentials)
+        data = ga4_service.get_realtime_data()
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"リアルタイムデータの取得に失敗: {str(e)}")
+
+@app.get("/api/ga4/overview")
+async def get_ga4_overview(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GA4 トラフィック概要を取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        ga4_service = GA4Service(credentials)
+        data = ga4_service.get_traffic_overview(start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"トラフィック概要の取得に失敗: {str(e)}")
+
+@app.get("/api/ga4/sources")
+async def get_ga4_sources(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d'),
+    limit: int = 10
+):
+    """GA4 トラフィックソース別データを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        ga4_service = GA4Service(credentials)
+        data = ga4_service.get_traffic_by_source(start_date, end_date, limit)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"トラフィックソースの取得に失敗: {str(e)}")
+
+@app.get("/api/ga4/pages")
+async def get_ga4_pages(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d'),
+    limit: int = 20
+):
+    """GA4 人気ページを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        ga4_service = GA4Service(credentials)
+        data = ga4_service.get_top_pages(start_date, end_date, limit)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"人気ページの取得に失敗: {str(e)}")
+
+@app.get("/api/ga4/daily")
+async def get_ga4_daily(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GA4 日別トラフィックを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        ga4_service = GA4Service(credentials)
+        data = ga4_service.get_daily_traffic(start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"日別トラフィックの取得に失敗: {str(e)}")
+
+@app.get("/api/ga4/countries")
+async def get_ga4_countries(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d'),
+    limit: int = 10
+):
+    """GA4 国別トラフィックを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        ga4_service = GA4Service(credentials)
+        data = ga4_service.get_traffic_by_country(start_date, end_date, limit)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"国別トラフィックの取得に失敗: {str(e)}")
+
+@app.get("/api/ga4/devices")
+async def get_ga4_devices(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GA4 デバイス別トラフィックを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        ga4_service = GA4Service(credentials)
+        data = ga4_service.get_traffic_by_device(start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"デバイス別トラフィックの取得に失敗: {str(e)}")
+
+@app.get("/api/ga4/organic")
+async def get_ga4_organic(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GA4 オーガニック検索トラフィックを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        ga4_service = GA4Service(credentials)
+        data = ga4_service.get_organic_search_traffic(start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"オーガニックトラフィックの取得に失敗: {str(e)}")
+
+# GSC エンドポイント
+@app.get("/api/gsc/overview")
+async def get_gsc_overview(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GSC 検索パフォーマンス概要を取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        gsc_service = GSCService(credentials)
+        data = gsc_service.get_overview(start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"検索パフォーマンス概要の取得に失敗: {str(e)}")
+
+@app.get("/api/gsc/queries")
+async def get_gsc_queries(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d'),
+    limit: int = 20
+):
+    """GSC 上位検索クエリを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        gsc_service = GSCService(credentials)
+        data = gsc_service.get_top_queries(start_date, end_date, limit)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上位クエリの取得に失敗: {str(e)}")
+
+@app.get("/api/gsc/pages")
+async def get_gsc_pages(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d'),
+    limit: int = 20
+):
+    """GSC 上位ページを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        gsc_service = GSCService(credentials)
+        data = gsc_service.get_top_pages(start_date, end_date, limit)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"上位ページの取得に失敗: {str(e)}")
+
+@app.get("/api/gsc/countries")
+async def get_gsc_countries(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d'),
+    limit: int = 10
+):
+    """GSC 国別パフォーマンスを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        gsc_service = GSCService(credentials)
+        data = gsc_service.get_performance_by_country(start_date, end_date, limit)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"国別パフォーマンスの取得に失敗: {str(e)}")
+
+@app.get("/api/gsc/devices")
+async def get_gsc_devices(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GSC デバイス別パフォーマンスを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        gsc_service = GSCService(credentials)
+        data = gsc_service.get_performance_by_device(start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"デバイス別パフォーマンスの取得に失敗: {str(e)}")
+
+@app.get("/api/gsc/daily")
+async def get_gsc_daily(
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GSC 日別パフォーマンスを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        gsc_service = GSCService(credentials)
+        data = gsc_service.get_daily_performance(start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"日別パフォーマンスの取得に失敗: {str(e)}")
+
+@app.get("/api/gsc/page-performance")
+async def get_gsc_page_performance(
+    page_url: str,
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GSC 特定ページのパフォーマンスを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        gsc_service = GSCService(credentials)
+        data = gsc_service.get_page_performance(page_url, start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"ページパフォーマンスの取得に失敗: {str(e)}")
+
+@app.get("/api/gsc/query-performance")
+async def get_gsc_query_performance(
+    query: str,
+    start_date: str = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+    end_date: str = datetime.now().strftime('%Y-%m-%d')
+):
+    """GSC 特定クエリのパフォーマンスを取得"""
+    try:
+        auth_service = GoogleAuthService()
+        credentials = auth_service.get_credentials()
+        
+        if not credentials:
+            raise HTTPException(status_code=401, detail="Google アカウントに接続されていません")
+        
+        gsc_service = GSCService(credentials)
+        data = gsc_service.get_query_performance(query, start_date, end_date)
+        
+        return data
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"クエリパフォーマンスの取得に失敗: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)

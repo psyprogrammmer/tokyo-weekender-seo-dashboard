@@ -28,7 +28,8 @@ Tokyo WeekenderのOrganic Growthを促進するための包括的な分析基盤
 ## データソース
 
 - Tokyo Weekender キーワードリスト（Ahrefs）
-- Google Search Console データ
+- **Google Analytics 4** (GA4) - リアルタイムトラフィックデータ
+- **Google Search Console** (GSC) - 検索パフォーマンスデータ
 - 競合サイトキーワードリスト（Ahrefs）
 
 ## 技術スタック
@@ -40,6 +41,9 @@ Tokyo WeekenderのOrganic Growthを促進するための包括的な分析基盤
 - SQLAlchemy with Alembic
 - Pandas, NumPy
 - scikit-learn
+- **Google Analytics Data API** - GA4 データ取得
+- **Google Search Console API** - GSC データ取得
+- Google OAuth 2.0 認証
 
 ### フロントエンド
 - React 18
@@ -74,7 +78,19 @@ pip install -r requirements.txt
 npm install
 ```
 
-### 3. データベースの初期化
+### 3. Google API の設定（オプション）
+
+GA4 と GSC のリアルタイムデータを取得する場合、Google API の設定が必要です。
+
+詳細な設定手順は [GOOGLE_API_SETUP.md](docs/GOOGLE_API_SETUP.md) を参照してください。
+
+簡易手順:
+1. Google Cloud Console で OAuth 2.0 クライアント ID を作成
+2. クライアントシークレット JSON を `data/credentials/google_client_secret.json` に配置
+3. `.env` に GA4 Property ID と GSC Site URL を設定
+4. アプリケーションの Settings ページで Google アカウントに接続
+
+### 4. データベースの初期化
 
 ```bash
 # データベースマイグレーション
@@ -84,7 +100,7 @@ alembic upgrade head
 python analysis/scripts/migrate_to_neon.py
 ```
 
-### 4. アプリケーションの起動
+### 5. アプリケーションの起動
 
 ```bash
 # バックエンド起動
@@ -138,10 +154,39 @@ tokyo-weekender/
 - **フィルタリング**: 高度な検索とフィルタリング機能
 - **集計処理**: SQL による効率的なデータ集計
 
+## Google API 統合（新機能）
+
+### ✅ 実装済み機能
+
+#### Google Analytics 4 (GA4)
+- **リアルタイムデータ**: 現在のアクティブユーザー数と所在地
+- **トラフィック概要**: セッション数、ユーザー数、ページビュー数、直帰率など
+- **トラフィックソース**: チャネル別のトラフィック分析
+- **人気ページ**: ページビュー数が多いページのランキング
+- **地域別トラフィック**: 国別・都市別のトラフィック分布
+- **デバイス別トラフィック**: デスクトップ・モバイル・タブレット別分析
+- **オーガニック検索トラフィック**: 検索エンジン別のオーガニックトラフィック
+
+#### Google Search Console (GSC)
+- **検索パフォーマンス概要**: クリック数、表示回数、CTR、平均掲載順位
+- **上位検索クエリ**: クリック数が多いクエリのランキング
+- **上位ページ**: 検索パフォーマンスが高いページのランキング
+- **地域別パフォーマンス**: 国別の検索パフォーマンス
+- **デバイス別パフォーマンス**: デバイス別の検索パフォーマンス
+- **日別パフォーマンス**: 時系列での検索パフォーマンス推移
+- **特定ページ/クエリの分析**: 詳細なページ・クエリ別分析
+
+### 🔐 セキュリティ
+
+- **OAuth 2.0 認証**: Google の標準的な認証フロー
+- **スコープ制限**: 読み取り専用アクセス（`.readonly`）
+- **トークン管理**: 自動リフレッシュとセキュアな保存
+
 ## 今後の拡張予定
 
-1. **Google Search Console連携**: リアルタイムデータ取得とNEON同期
+1. ✅ ~~**Google Search Console連携**: リアルタイムデータ取得とNEON同期~~ (実装済み)
 2. **競合分析の自動化**: 複数競合サイトの比較分析
 3. **AI駆動コンテンツ提案**: 機械学習によるコンテンツ戦略提案
 4. **レポート自動生成**: 定期的な分析レポートの自動生成
+5. **GA4/GSC データの自動同期**: データベースへの定期的なデータ保存
 5. **リアルタイムダッシュボード**: WebSocketによるリアルタイム更新

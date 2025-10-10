@@ -16,3 +16,8 @@ seaborn==0.13.0
 plotly==5.17.0
 requests==2.31.0
 aiofiles==23.2.1
+google-analytics-data==0.18.0
+google-api-python-client==2.108.0
+google-auth==2.25.2
+google-auth-oauthlib==1.2.0
+google-auth-httplib2==0.2.0
