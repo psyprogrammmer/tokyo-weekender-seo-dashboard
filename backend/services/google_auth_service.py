@@ -35,6 +35,24 @@ class GoogleAuthService:
         
         # 認証情報ディレクトリの作成
         self.token_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        # 環境変数からクライアントシークレットを読み込む（本番環境用）
+        self._setup_client_secret_from_env()
+    
+    def _setup_client_secret_from_env(self):
+        """環境変数からクライアントシークレットを設定（本番環境用）"""
+        # ファイルが既に存在する場合はスキップ
+        if self.client_secret_path.exists():
+            return
+        
+        # 環境変数からクライアントシークレットを取得
+        client_secret_json = os.getenv('GOOGLE_CLIENT_SECRET_JSON')
+        
+        if client_secret_json:
+            # 環境変数からファイルを作成
+            with open(self.client_secret_path, 'w') as f:
+                f.write(client_secret_json)
+            print("✅ クライアントシークレットを環境変数から設定しました")
     
     def get_authorization_url(self, redirect_uri: str) -> str:
         """

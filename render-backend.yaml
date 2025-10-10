@@ -4,7 +4,7 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn backend.simple_main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PYTHONPATH
         value: /opt/render/project/src
@@ -19,5 +19,13 @@ services:
       - key: DEBUG
         value: false
       - key: RENDER_API_TOKEN
+        sync: false  # This will be set in Render.com dashboard
+      - key: GA4_PROPERTY_ID
+        sync: false  # This will be set in Render.com dashboard
+      - key: GSC_SITE_URL
+        value: https://www.tokyoweekender.com/
+      - key: GOOGLE_REDIRECT_URI
+        value: https://tokyo-weekender-seo-dashboard.onrender.com/settings
+      - key: GOOGLE_CLIENT_SECRET_JSON
         sync: false  # This will be set in Render.com dashboard
 
